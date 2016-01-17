@@ -1,5 +1,5 @@
-##logTail 
-#remastered 
+#logTail 
+##remastered 
 is a small qick and dirty python log colourisation-tool which helps observing 
 unix-style log files. It has several capabilities.
 VERSION 0.9.4 has been completely remastered
@@ -37,7 +37,7 @@ everything is case-sensitive - unices-style.
 DROP{KEYWORD} FOObar 
 Lines with " FOObar " would be - you guess it - dropped  while " foobar " won't
 
-#"_AND_" does a logical and on the given keywords
+"_AND_" does a logical and on the given keywords
 DROP{KEYWORD}Foo_AND_ bar
 Lines like "Something Foo somethingelse bar " are dropped (watch the whitespaces!)
 
@@ -85,7 +85,7 @@ And at this point, hopefully the modern SoC will have a beeper in future again..
 POSTTRIGGER{firewall}sudo /root/bin/firewall.sh _LINE_ 
 will evaluate _LINE_ as the actual logline, so you may pass it as parameter
 
-#Note
+###Note
 Everything works on-the-fly, your logs won't be touched at all.
 Even though you are using -c(atenate) a single file 
 
@@ -95,7 +95,8 @@ Any "important" string which changes in a regular manner e.g. an dynamic IP,
 which you want to be replaced/and colorised.
 e.g. your external dynamic IP should be highlighted or replaced with ppp or similar.
 
-#REMOTE commands via "log":
+### REMOTE commands via "log":
+
 1) LOGTAILREPLACE x WITH y
 When logTail recognises (case-sensivite) "LOGTAILREPLACE foo-key WITH bar-value" in a line, it
 will add/modify this on-the-fly to the list of replacements. 
@@ -116,7 +117,7 @@ logTail does now a very simple binary-check for existing files and
 will ignore those files which look more or less far behind a plain-text-file.
 
 
-# (my) best practice:
+### (my) best practice:
 
 a) Create a "logtail" directory, e.g. /var/log/messages/logtail and symlink
 any "wanted" logfile in there.
