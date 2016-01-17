@@ -34,55 +34,55 @@ Yet, again another configuration scheme, due to the fact, the
 Whitespaces within configuration are NOT ignored and additionally 
 everything is case-sensitive - unices-style.
 
-`DROP{ FOObar}
+>DROP{ FOObar}
 Lines with " FOObar " would be - you guess it - dropped  while " foobar " won't
 
 "_AND_" does a logical and on the given keywords
-DROP{KEYWORD}Foo_AND_ bar
+>DROP{KEYWORD}Foo_AND_ bar
 Lines like "Something Foo somethingelse bar " are dropped (watch the whitespaces!)
 
 
-REPLACE{ fooBaR }FooBAR
+>REPLACE{ fooBaR }FooBAR
 just replaces words (incl. whitespaces!) in a log line so
 " fooBaR " results in "fooBAR"
 while
-REPLACE{ fooBaR } FooBAR 
-will result in
+>REPLACE{ fooBaR } FooBAR 
+
 " fooBaR " results in " fooBAR "
 
 
-REPLACE{DPT#}
+>REPLACE{DPT#}
 This one will replace DPT=22 with nothing. The "#" means: Looking for DPT and the following up 
 to the next whitespace even after REPLACE you might COLORise strings
 
 Replacing doesn't work in dropped line of course.
 
-COLOR{ FooBar:}bblack white blink
+>COLOR{ FooBar:}bblack white blink
 Colourises " FooBar:" in White on Black and let it blink
 (special esc sequences like blink will work on supported terminals only)
 
-COLOR{DPT#}bred white underscore
+>COLOR{DPT#}bred white underscore
 Colourises "DPT=FOO in white wit red background and sets underscore (next whitespace will reset the color/underscore to normal)
 In detail the # separates the colouriser from the keyword to be searched.
 In other words, "DPT" is the trigger to  colourise the string starting at "DPT" up to next whitespace,
 so value pairs are treated dynamically.
-`
+
 Colourising will do its job pretty much _after_ any replacement.
 
 logTail understands the following aliases of AnsiEsc Colours
 Foreground:
-black red green yellow blue magenta cyan white 
+>black red green yellow blue magenta cyan white 
 Background:
-bblack bred bgreen byellow bblue bmagenta bcyan bwhite 
+>bblack bred bgreen byellow bblue bmagenta bcyan bwhite 
 specials:
-bold blink cright cleft cup cdown beep concealed underscore reverse
+>bold blink cright cleft cup cdown beep concealed underscore reverse
 
 
 
-POSTTRIGGER{firewall_AND_warning_AND_foobar}sudo /usr/sbin/beeper -f 2000 -l 100
+>POSTTRIGGER{firewall_AND_warning_AND_foobar}sudo /usr/sbin/beeper -f 2000 -l 100
 This one does exactly what you expect. Please note that you may add an "&" to the commands...
 And at this point, hopefully the modern SoC will have a beeper in future again... :)
-POSTTRIGGER{firewall}sudo /root/bin/firewall.sh _LINE_ 
+>POSTTRIGGER{firewall}sudo /root/bin/firewall.sh _LINE_ 
 will evaluate _LINE_ as the actual logline, so you may pass it as parameter
 
 ###Note
