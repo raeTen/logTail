@@ -35,18 +35,23 @@ Whitespaces within configuration are NOT ignored and additionally
 everything is case-sensitive - unices-style.
 
 >DROP{ FOObar}
-Lines with " FOObar " would be - you guess it - dropped  while " foobar " won't
 
+Lines with " FOObar " would be - you guess it - dropped  while " foobar " won't
 "_AND_" does a logical and on the given keywords
+
 >DROP{KEYWORD}Foo_AND_ bar
+
+
 Lines like "Something Foo somethingelse bar " are dropped (watch the whitespaces!)
 
 
 >REPLACE{ fooBaR }FooBAR
+
 just replaces words (incl. whitespaces!) in a log line so
 " fooBaR " results in "fooBAR"
 while
 >REPLACE{ fooBaR } FooBAR 
+
 
 " fooBaR " results in " fooBAR "
 
@@ -62,6 +67,7 @@ Colourises " FooBar:" in White on Black and let it blink
 (special esc sequences like blink will work on supported terminals only)
 
 >COLOR{DPT#}bred white underscore
+
 Colourises "DPT=FOO in white wit red background and sets underscore (next whitespace will reset the color/underscore to normal)
 In detail the # separates the colouriser from the keyword to be searched.
 In other words, "DPT" is the trigger to  colourise the string starting at "DPT" up to next whitespace,
@@ -71,21 +77,28 @@ Colourising will do its job pretty much _after_ any replacement.
 
 logTail understands the following aliases of AnsiEsc Colours
 Foreground:
+
 >black red green yellow blue magenta cyan white 
+
 Background:
+
 >bblack bred bgreen byellow bblue bmagenta bcyan bwhite 
+
 specials:
+
 >bold blink cright cleft cup cdown beep concealed underscore reverse
 
 
 
 >POSTTRIGGER{firewall_AND_warning_AND_foobar}sudo /usr/sbin/beeper -f 2000 -l 100
+
 This one does exactly what you expect. Please note that you may add an "&" to the commands...
 And at this point, hopefully the modern SoC will have a beeper in future again... :)
 >POSTTRIGGER{firewall}sudo /root/bin/firewall.sh _LINE_ 
 will evaluate _LINE_ as the actual logline, so you may pass it as parameter
 
 ###Note
+
 Everything works on-the-fly, your logs won't be touched at all.
 Even though you are using -c(atenate) a single file 
 
@@ -95,18 +108,21 @@ Any "important" string which changes in a regular manner e.g. an dynamic IP,
 which you want to be replaced/and colorised.
 e.g. your external dynamic IP should be highlighted or replaced with ppp or similar.
 
-### REMOTE commands via "log":
+#### REMOTE commands via "log":
 
 1) LOGTAILREPLACE x WITH y
+
 When logTail recognises (case-sensivite) "LOGTAILREPLACE foo-key WITH bar-value" in a line, it
 will add/modify this on-the-fly to the list of replacements. 
 These changes won't be written to the configuration,
 and are dealed with as long it is not aborted or "overwritten" or *3
 
 2) LOGTAILSTATS
+
 Another command is "LOGTAILSTATS", which will inform about dropped lines and so on 
 
 3)LOGTAILCLEAR
+
 This "clears" the list of REMOTE injected REPLACEments.
 
 Note that any "seen" remote coomand will ommit that line, instead it just
