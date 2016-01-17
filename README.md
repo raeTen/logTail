@@ -34,7 +34,7 @@ Yet, again another configuration scheme, due to the fact, the
 Whitespaces within configuration are NOT ignored and additionally 
 everything is case-sensitive - unices-style.
 
-DROP{KEYWORD} FOObar 
+DROP{ FOObar}
 Lines with " FOObar " would be - you guess it - dropped  while " foobar " won't
 
 "_AND_" does a logical and on the given keywords
