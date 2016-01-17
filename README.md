@@ -34,7 +34,7 @@ Yet, again another configuration scheme, due to the fact, the
 Whitespaces within configuration are NOT ignored and additionally 
 everything is case-sensitive - unices-style.
 
-DROP{ FOObar}
+`DROP{ FOObar}
 Lines with " FOObar " would be - you guess it - dropped  while " foobar " won't
 
 "_AND_" does a logical and on the given keywords
@@ -66,7 +66,7 @@ Colourises "DPT=FOO in white wit red background and sets underscore (next whites
 In detail the # separates the colouriser from the keyword to be searched.
 In other words, "DPT" is the trigger to  colourise the string starting at "DPT" up to next whitespace,
 so value pairs are treated dynamically.
-
+`
 Colourising will do its job pretty much _after_ any replacement.
 
 logTail understands the following aliases of AnsiEsc Colours
