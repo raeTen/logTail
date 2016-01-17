@@ -34,22 +34,25 @@ Yet, again another configuration scheme, due to the fact, the
 Whitespaces within configuration are NOT ignored and additionally 
 everything is case-sensitive - unices-style.
 
+### DROP
+
 >DROP{ FOObar}
 
 Lines with " FOObar " would be - you guess it - dropped  while " foobar " won't
 "_AND_" does a logical and on the given keywords
 
->DROP{KEYWORD}Foo_AND_ bar
-
+>DROP{Foo_AND_ bar}
 
 Lines like "Something Foo somethingelse bar " are dropped (watch the whitespaces!)
 
+### REPLACE
 
 >REPLACE{ fooBaR }FooBAR
 
 just replaces words (incl. whitespaces!) in a log line so
 " fooBaR " results in "fooBAR"
 while
+
 >REPLACE{ fooBaR } FooBAR 
 
 
@@ -57,12 +60,16 @@ while
 
 
 >REPLACE{DPT#}
+
 This one will replace DPT=22 with nothing. The "#" means: Looking for DPT and the following up 
 to the next whitespace even after REPLACE you might COLORise strings
 
-Replacing doesn't work in dropped line of course.
+Replacing doesn't work in dropped lines of course.
+
+### COLOR
 
 >COLOR{ FooBar:}bblack white blink
+
 Colourises " FooBar:" in White on Black and let it blink
 (special esc sequences like blink will work on supported terminals only)
 
@@ -76,6 +83,7 @@ so value pairs are treated dynamically.
 Colourising will do its job pretty much _after_ any replacement.
 
 logTail understands the following aliases of AnsiEsc Colours
+
 Foreground:
 
 >black red green yellow blue magenta cyan white 
@@ -88,7 +96,7 @@ specials:
 
 >bold blink cright cleft cup cdown beep concealed underscore reverse
 
-
+### POSTTRIGGER
 
 >POSTTRIGGER{firewall_AND_warning_AND_foobar}sudo /usr/sbin/beeper -f 2000 -l 100
 
@@ -128,6 +136,15 @@ This "clears" the list of REMOTE injected REPLACEments.
 Note that any "seen" remote coomand will ommit that line, instead it just
 prints out internal informations.
 
+### HIGHLIGHT
+
+>HIGHLIGHT{foobar}bred
+
+next version
+
+### Binary Log Files
+
+Are not supported since they will mess up your terminal ;-)
 
 logTail does now a very simple binary-check for existing files and 
 will ignore those files which look more or less far behind a plain-text-file.
