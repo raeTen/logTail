@@ -109,6 +109,7 @@ specials:
 This one does exactly what you expect. Please note that you may add an "&" to the commands...
 And at this point, hopefully the modern SoC will have a beeper in future again... :)
 >POSTTRIGGER{firewall}sudo /root/bin/firewall.sh _LINE_ 
+
 will evaluate _LINE_ as the actual logline, so you may pass it as parameter
 
 ###Note
@@ -152,8 +153,8 @@ next version
 
 Are not supported since they will mess up your terminal ;-)
 
-logTail does now a very simple binary-check for existing files and 
-will ignore those files which look more or less far behind a plain-text-file.
+logTail tries to verify a non binary log by a simple check and
+will ignore files which don't look like what we call plain-text-file.
 
 
 ### (my) best practice:
