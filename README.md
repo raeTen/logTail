@@ -22,7 +22,7 @@ No further issues with e.g. logrotate truncated file.
 It also reloads its configuration file after modification.
 This way, your personal configuration will grow peu a peu ;-)
 
-logTail also drops same lines in order, after REPLACEing the replacesment-keywords similar to any syslogd.
+logTail also drops same lines in order, after REPLACEing the replacement-keywords similar to any syslogd.
 There's a "sensivity" (-s) for that. Default is 2. This means, logTail will say "repeated message"
 when a maximum of 2 characters were different. Assigning -s 0 means, the lines have to be exactly 
 the same to be dropped.
@@ -39,7 +39,10 @@ everything is case-sensitive - unices-style.
 >DROP{ FOObar}
 
 Lines with " FOObar " would be - you guess it - dropped  while " foobar " won't
-"_AND_" does a logical and on the given keywords
+
+>_AND_ 
+
+does a logical AND on the given keywords
 
 >DROP{Foo_AND_ bar}
 
@@ -61,8 +64,11 @@ while
 
 >REPLACE{DPT#}
 
-This one will replace DPT=22 with nothing. The "#" means: Looking for DPT and the following up 
-to the next whitespace even after REPLACE you might COLORise strings
+This one will replace DPT=22 with nothing. 
+
+The "#" means: Looking for >DPT< and the following up to the next >whitespace< 
+and even after REPLACE you might COLORise those strings.
+
 
 Replacing doesn't work in dropped lines of course.
 
