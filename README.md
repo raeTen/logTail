@@ -172,7 +172,7 @@ Depending on what,where and how much is being logged, you could start logTail
 in different ways by renaming the .py file e.g. ./logTail2.py ./logTail_kern_log.py
 and so on. Ensure to give any "logTail" a different configuration file by
 passing it with -f (--configgile).
-Please note the option - l for single logfiles are no longer granted.
+Please note: the option - l for single logfiles is not longer granted.
 
 c) "start_logTail.sh" starts a instance within a screen session, which is the most
 useful way which I prefer.
