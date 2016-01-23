@@ -5,7 +5,7 @@
 # the Free Software Foundation; either version 2 of the License, or
 # (at your option) any later version.
 # My requirement for later versions: There is no possibility to transfer it into closed source.
-# LogTail has been developed for reasons mentioned in the readme.txt,
+# logTail has been developed for reasons mentioned in the readme.txt,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
@@ -13,7 +13,7 @@
 # along with this; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 # V 0.9.4 (remastered)
-# V 0.9.5  still some issues to fix with different terminals scrolling etc
+# V 0.9.5  still some issues to fix with different terminals scrolling and "highlight"
 # (c) 2008-2016 neTear 
 #Thanks to every open mind for sharing all the good knowledge on computing
 INTERNAL_PREFIX = "\033[1;31mlog\033[33mTail\033[37m:\033[0m "
@@ -427,7 +427,8 @@ def main():
 												if lastline.find(hl) >- 1:
 													stats["highlighted"] += 1
 													hlv = config["HIGHLIGHT"].get(hl, 0)
-													#hm underscore so set at begin and after all 0m?
+													""" TODO """
+													#testing with underscore complete line. Better a newline with single coloured overline
 													#self_log(  "to be highlighted with "+hlv+" linelength="+str(len(lastline)) )
 											""" main out"""
 											print "\033[K"
