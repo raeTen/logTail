@@ -1,8 +1,12 @@
 #logTail 
-##remastered 
+####V 0.9.5
 is a small qick and dirty python log colourisation-tool which helps observing 
 unix-style log files. It has several capabilities.
-VERSION 0.9.4 has been completely remastered
+Unices ONLY for now and then - since I won't deal with fairytale-logging
+
+[X]VERSION 0.9.4 remastered
+[X] VERSION 0.9.5 redesigned
+[ ] VERSION 0.9.6 will have fixed issues with timing
 
 It will "tail -f" all files in a given directory (-d[estination-path]), or just catenate a given
 single file on-the-fly with -c(atenate). The latter won't trigger any "posttrigger",
@@ -27,12 +31,27 @@ There's a "sensivity" (-s) for that. Default is 2. This means, logTail will say 
 when a maximum of 2 characters were different. Assigning -s 0 means, the lines have to be exactly 
 the same to be dropped.
 
-Here is a small description of what you can do within the configuration.
-Yet, again another configuration scheme, due to the fact, the
-"ConfigParser" isn't (or was) case-sensitive.
-
 Whitespaces within configuration are NOT ignored and additionally 
 everything is case-sensitive - unices-style.
+
+logTail now has a simple status line and any modification could be toogled on|off by
+pressing
+
+>m(essage repeated)
+
+>d(dropped)
+
+>r(replace)
+
+>c(olourised)
+
+>t(riggered)
+
+>h(ighlighted)
+
+>p(ause)
+
+Here are samples of what you can do within the configuration.
 
 ### DROP
 
@@ -108,14 +127,30 @@ specials:
 
 This one does exactly what you expect. Please note that you may add an "&" to the commands...
 And at this point, hopefully the modern SoC will have a beeper in future again... :)
+
 >POSTTRIGGER{firewall}sudo /root/bin/firewall.sh _LINE_ 
 
-will evaluate _LINE_ as the actual logline, so you may pass it as parameter
+>POSTTRIGGER{firewall}sudo /root/bin/firewall.sh _OLINE_ 
 
+will evaluate _LINE_ to the actual logline (after logTail replace/colorise) logline, 
+_OLINE_ as the origin logline respectively.
+So logTail passes them as _one_ single parameter.
+
+It's like:
+
+>/root/bin/test.sh "the (origin) log line complete" 
+
+but _not_
+
+>/root/bin/test.sh the (origin) log line complete
+
+You might give additional real parameters to POSTTRIGGER, but _(O)LINE_ renders to "the logline" as one parameter
+Be careful with _LINE_ because it might call some externals which logs the TRIGGER-Keyword again, and that will
+end up with a deadloop
 ###Note
 
 Everything works on-the-fly, your logs won't be touched at all.
-Even though you are using -c(atenate) a single file 
+Even though while -c(atenate) a single file 
 
 Another option is to "send" a "Replace-command" via the origin log.
 You may use something like "logger" on remote machines.
@@ -132,29 +167,27 @@ will add/modify this on-the-fly to the list of replacements.
 These changes won't be written to the configuration,
 and are dealed with as long it is not aborted or "overwritten" or *3
 
-2) LOGTAILSTATS
+2 )LOGTAILCLEAR
 
-Another command is "LOGTAILSTATS", which will inform about dropped lines and so on 
-
-3)LOGTAILCLEAR
-
-This "clears" the list of REMOTE injected REPLACEments.
+This "clears" the list of REMOTE injected REPLACEments only.
 
 Note that any "seen" remote coomand will ommit that line, instead it just
 prints out internal informations.
 
 ### HIGHLIGHT
 
->HIGHLIGHT{foobar}bred
+>HIGHLIGHT{foo_AND_bar}
 
-next version
+this is done *after* REPLACE and COLOURISE
+It simply underscores the complete log-line on matches
 
 ### Binary Log Files
 
 Are not supported since they will mess up your terminal ;-)
 
-logTail tries to verify a non binary log by a simple check and
+logTail tries to verify a non-binary logfile by a simple check and
 will ignore files which don't look like what we call plain-text-file.
+Maybe switched off bei passing -b 0
 
 
 ### (my) best practice:
@@ -163,15 +196,16 @@ a) Create a "logtail" directory, e.g. /var/log/messages/logtail and symlink
 any "wanted" logfile in there.
 logTail will now recognise new/deleted/truncated files automatically.
 So just start it, link your preferred files (or remove a link) in place of the
-given path  and even modify the config while it runs.
+given path. There's even no reason to restart for modifications within in configuration files
 It will inform about discerned changes.
 
-b) any syslogd could use a single logserver. syslogd(s) have
+b) any syslogd* could use a single logserver. syslogd(s) have
 many powerful mechanisms to do so. 
 Depending on what,where and how much is being logged, you could start logTail
 in different ways by renaming the .py file e.g. ./logTail2.py ./logTail_kern_log.py
-and so on. Ensure to give any "logTail" a different configuration file by
-passing it with -f (--configgile).
+and so on. Each with a different configuration file by
+passing it with -f (--configfile).
+
 Please note: the option - l for single logfiles is not longer granted.
 
 c) "start_logTail.sh" starts a instance within a screen session, which is the most
@@ -179,5 +213,6 @@ useful way which I prefer.
 
 d) The qualitiy of rendered colours is hinging on the terminal software.
   I'm using xterm and Konsole which are very fine with ansi.
+  Maybe I'll play around with 256color ansi someday
 
 f) have fun...

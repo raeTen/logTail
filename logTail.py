@@ -13,22 +13,64 @@
 # along with this; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 # V 0.9.4 (remastered)
+# V 0.9.5  still some issues to fix with different terminals scrolling etc
 # (c) 2008-2016 neTear 
 #Thanks to every open mind for sharing all the good knowledge on computing
-#from __future__ import with_statement
 INTERNAL_PREFIX = "\033[1;31mlog\033[33mTail\033[37m:\033[0m "
-VERSION = "0.9.4"
+FND_PREFIX="\033[30;1m" 
+STATUS_PREFIX="\033[?25l"
+VERSION = "0.9.5"
 ETERNITY = True 
 """ rescanning given destination-path after x seconds """
 SCAN_INTERVAL = 20
 """second 0.5 - 5 are convenient TODO depending on logtraffic and cpu"""
-POLLBASE = .8
-import os, time, sys, getopt, string, fnmatch
+POLLBASE = .9
+
+KEYB = ( {'q':'quit', 'r':'replaced', 'd':'dropped',\
+		  'h':'highlighted', 'p':'seen', 's':'stats',\
+		  'c':'colourised', 't':'triggered','m':'repeated',\
+		  'i':'statusline'}
+		  )
+import sys, os, time, getopt, string, fnmatch
 from optparse import OptionParser
 import datetime
 import re
 
+import threading, Queue
+import tty, termios, atexit
+LF="\r"
+""" workaround getting one byte as keypress from stdin"""
+old_settings = termios.tcgetattr(sys.stdin.fileno())
+def clean_up_term():
+	fd = sys.stdin.fileno()
+	tty.setcbreak(sys.stdin.fileno())
+	termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+	print "\033[?25h"+"\033[0m"+"Done"
+
+def get_ch():
+	fd = sys.stdin.fileno()
+	old_settings = termios.tcgetattr(fd)
+	try:
+		tty.setraw(sys.stdin.fileno())
+		ch = sys.stdin.read(1)
+		sys.stdin.flush()
+	finally:
+		tty.setcbreak(sys.stdin.fileno())
+		termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+	return ch
+
+def add_input(input_queue):
+	input_queue.put(get_ch())
+
+def io_thread():
+	input_queue = Queue.Queue()
+	input_thread = threading.Thread(target=add_input, args=(input_queue,))
+	input_thread.daemon = True
+	input_thread.start()
+	return input_queue
+
 def file_init():
+	atexit.register(clean_up_term)
 	try:
 		onearg=sys.argv[1]
 	except:
@@ -52,14 +94,17 @@ def get_commandline_options():
 	parser.add_option("-f", "--configfile", dest = "configfile", help = "Location of configfile while not present within etc or bin-directory", type = "string", default = conffile)
 	parser.add_option("-d", "--destination-path", dest = "logpath",help = "Tails all files in this destination path", type = "string", default = onearg)
 	parser.add_option("-c", "--catenate", dest = "catenate", help = "-c cat(enate) and colourise given file completely on the fly", type = "string", default = "")
-	parser.add_option("-o", "--output-file", dest = "catenateOutput", help = "-c cat(enate) -o foobar.txt writes to file instead to stdout", type = "string", default = "")
+	#parser.add_option("-o", "--output-file", dest = "catenateOutput", help = "-c cat(enate) -o foobar.txt writes to file instead to stdout", type = "string", default = "")
 	parser.add_option("-s", "--sensivity", dest="sensivity",help = "Sensivity for dropping same log lines", type = "int", default = 2)
-	parser.add_option("-m", "--message_repeated", dest = "mrp", help = "Tell about repeated messages", type="int", default = 1)
+	parser.add_option("-m", "--message_repeated", dest = "mrp", help = "Tell about repeated messages", type="int", default = True)
 	""" it does not make sense to convert microTimestamps since we'd need boot time from origin system"""
 	parser.add_option("-k", "--kill-microTS", dest = "microTS", help = "replace microTS like [123123.123123] with something. -k \"\" will not replace", type = "string", default = "\033[41m \033[0m")
-	parser.add_option("-i", "--internal-info", dest = "internalInfo", help = "logTail gives internal informations", type = "int", default = 1)
-	parser.add_option("-p", "--print-filename", dest = "printFilename", help = "logTail inserts logfile names ", type = "int", default = 1)
+	parser.add_option("-p", "--print-filename", dest = "printFilename", help = "logTail inserts logfile names", type = "int", default = 1)
+	parser.add_option("-l", "--limitFilename", dest = "limitFilename", help = "logTail truncates filenames to a maximum, recommends -p", type = "int", default = 0)
+	parser.add_option("-i", "--infoline", dest = "infoLine", help = "displays a info status line", type = "int", default = 1)
 	parser.add_option("-b", "--binary-check", dest = "binaryCheck", help = "-d 0 will switch off simple binary check on logfiles ", type = "int", default = 1)
+	parser.add_option("-r", "--replace-logtime", dest = "replaceLogtime", help = "Tries to catch a logtime and truncates it", type = "int", default = 1)
+	
 	(options, args)=parser.parse_args()
 	return options
 	  
@@ -106,7 +151,7 @@ def loadConfig(config, options):
 		chainbuf = config["REMOTEREPLACE"]
 	config = {}
 	for chain in chains:
-			config[chain] = {}
+		config[chain] = {}
 	cfile = open(file, "r")
 	lines = cfile.read().split('\n')
 	act_mdate, reload_config = m_date(file, 0)
@@ -128,6 +173,7 @@ def loadConfig(config, options):
 		for v in chainbuf.keys():
 			config["REPLACE"][v] = chainbuf[v]
 	init_ansi_colors(config)
+	config["RE_TIME2"]= '.*?((?:(?:[0-1][0-9])|(?:[2][0-3])|(?:[0-9])):(?:[0-5][0-9])(?::[0-5][0-9])?(?:\\s?(?:am|AM|pm|PM))?)'
 	return config, act_mdate
 
 def isText(filename, binaryCheck):
@@ -145,14 +191,15 @@ def isText(filename, binaryCheck):
 		  f.close()
 	return True
 
-def pathScan(options, filenames, binary_filenames, pattern='*' ):
+def pathScan(options, config, filenames, binary_filenames, pattern='*' ):
 	try:
 		names = os.listdir(options.logpath)
 	except os.error:
 		self_log(str(os.error))
-		return filenames
+		sys.exit(0)
 	pattern = pattern or '*'
 	pat_list = string.splitfields( pattern , ';' )
+	maxlen = 8
 	for name in names:
 		fullname = os.path.normpath(os.path.join(options.logpath, name))
 		# grab if it matches our pattern and entry type
@@ -163,19 +210,26 @@ def pathScan(options, filenames, binary_filenames, pattern='*' ):
 						if not fullname in binary_filenames:
 							if not fullname in filenames.keys():
 								if isText(fullname, options.binaryCheck):
-									self_log("Found for tailing: "+fullname)
+									self_log(  "Found for tailing: "+fullname)
 									filenames[fullname] = 0
 								else:
 									if not fullname in binary_filenames:
 										binary_filenames.append(fullname)
-									self_log("NOT tailing: "+fullname)
+									self_log(  "NOT tailing: "+fullname)
 					except:
-						self_log(str(sys.exc_info()[1]) )
+						self_log( str(sys.exc_info()[1]) )
 				continue
+	if not options.limitFilename:
+		for f in filenames.keys():
+			if len(os.path.basename(f)) > maxlen:
+				maxlen = len(os.path.basename(f))
+	else:
+		maxlen = int(options.limitFilename) 
+	config["limitFilename"] = maxlen
 	return filenames, binary_filenames
 
-def re_pathScan(options, filenames, binary_filenames):
-	filenames, binary_filenames = pathScan(options, filenames, binary_filenames, '*')
+def re_pathScan(options, config, filenames, binary_filenames):
+	filenames, binary_filenames = pathScan(options, config, filenames, binary_filenames, '*')
 
 
 def kill_microTS(checkline, microTS):
@@ -185,31 +239,109 @@ def kill_microTS(checkline, microTS):
 			checkline = checkline.replace("["+match+"]", microTS)
 	return checkline
 
-def self_log(msg):
-	tformat = "%b %d %H:%M:%S "
-	today = datetime.datetime.today()
-	s = today.strftime(tformat)
-	print s + INTERNAL_PREFIX + msg
+def replace_log_datetimes(rec, checkline):
+	""" trying to minimize log-datetime stamps """
+	try:
+		trunc = checkline[:32]
+		m = rec.search(trunc)
+		if m:
+			time_at = trunc.find(m.group(1))
+		if time_at < 0:
+			return checkline
+		year_at = trunc.find('2016') #TODO
+		if year_at > time_at:
+				return FND_PREFIX + m.group(1) + '\033[0m' + checkline[year_at+4:]
+		if time_at > 0:
+			return FND_PREFIX + m.group(1) + '\033[0m' + checkline[time_at+len(m.group(1)):]
+	except:
+		pass
+	return checkline
 
+def compile_regexp(config):
+	return re.compile(config["RE_TIME2"],re.IGNORECASE|re.DOTALL)
+
+def act_time():
+	return datetime.datetime.today().strftime("%H:%M:%S ")
+	
+def self_log(msg):
+	print "\033[K"
+	print "\033[2A"
+	print INTERNAL_PREFIX + act_time() + msg + LF
+	
 def init_stats(stats):
 	stats["dropped"] = 0
 	stats["seen"] = 0
 	stats["repeated"] = 0
-
-def main():
+	stats["replaced"] = 0
+	stats["colourised"] = 0
+	stats["highlighted"] = 0
+	stats["triggered"] = 0
+	
+def print_status(config, key_flags, stats):
+	if 'i' in key_flags.keys():
+		print "\033[K\033[1A"
+		return False
+	tstat=""
+	tinfo="      "
+	for v in stats.keys():
+		if v in key_flags.values():
+			tstat = tstat+ STATUS_PREFIX + (v+":\033[1;5;31m"+"OFF"+"	\033[0m" + STATUS_PREFIX)
+		else:
+			tstat = tstat + STATUS_PREFIX + (v+":\033[1;32m"+str(stats[v])+"  \t\033[0m" + STATUS_PREFIX)
+	if 'p' in key_flags.keys():
+		tinfo=STATUS_PREFIX + "\033[1;5;33mPAUSED\033[0m" + STATUS_PREFIX
+	#print "\033[s|u"
+	print (
+			STATUS_PREFIX +
+			act_time() +
+			STATUS_PREFIX+ tinfo +
+			"	"+
+			tstat +
+			"\033[0m" +
+			"\r" +
+			config["MYCOLORS"].get("cup","1") 
+		  ) 
+	
+def init_check(options):
 	self_log("Version: "+VERSION+" remastered")
-	options = get_commandline_options()
 	if not options.logpath:
 		self_log("No destination-path for logfiles given")
+		sys.stdin = sys.__stdin__
 		sys.exit(1)
 	cf = options.configfile
+	if not os.path.isdir(options.logpath):
+		self_log("Missing -d(estination-path) or path does not exist")
+		sys.exit(1)
+	return options.configfile
+
+def key_handler(key_flags, input_queue):
+	key = input_queue.get()
+	if key == 'q':
+		sys.stdout = sys.__stdout__
+		sys.stdin = sys.__stdin__
+		sys.exit(0)
+	
+	if key in key_flags.keys():
+		del key_flags[key]
+	else:
+		if len(key) == 1 and key in KEYB.keys():
+			key_flags[key] = KEYB.get(key,0);
+	#print key_flags
+	input_queue = io_thread()
+	return input_queue
+
+def main():
+	input_queue = io_thread()
+	options = get_commandline_options()
+	cf = init_check(options)
 	catenate = options.catenate
 	config = {}
 	config, act_mdate = loadConfig(config, options)
-
+	rec1 = compile_regexp(config)
 	"""filename(s)+size(s)"""
 	filenames = {}
 	binary_filenames = []
+	key_flags = {}
 	stats = {}
 	init_stats(stats)
 	lastline = ""
@@ -219,72 +351,101 @@ def main():
 	scan_cnt = 0
 	for trigger in config["POSTTRIGGER"].keys():
 		self_log("WARN: '"+trigger+"' executes -> "+ config["POSTTRIGGER"].get(trigger,""))
-		
+
 	if not catenate:
-		filenames, binary_filenames = pathScan(options, filenames, binary_filenames, '*')
+		filenames, binary_filenames = pathScan(options, config, filenames, binary_filenames, '*')
 		if len(filenames) == 0:
 			self_log(logpath+" is empty! Waiting for logfiles")
-		self_log("-------------- starting -----------------")
+		self_log(  "-------------- starting -----------------")
 		
 		try:
 			while ETERNITY: 
 				""" main loop """
+				print_status(config, key_flags, stats)
+				if not input_queue.empty():
+					input_queue = key_handler(key_flags, input_queue)
 				time.sleep(POLLBASE)
 				scan_cnt+=1
 				if scan_cnt >= (float(1)/POLLBASE * SCAN_INTERVAL):
-					""" handle research on logfiles in given path """
-					re_pathScan(options, filenames, binary_filenames)
+					re_pathScan(options, config, filenames, binary_filenames)
 					scan_cnt=0
 				act_mdate, reload_config = m_date(cf, act_mdate)
 				if reload_config:
-					self_log("Reloading configuration.")
+					self_log(  "Reloading configuration.")
 					config, act_mdate = loadConfig(config, options)
 				for filename in filenames.keys():
 					try:
 						file = open(filename,'r')
-						""" Find the size of the file and move to the end """
+						""" file seeking """
 						log_new_size = os.stat(filename)[6]
 						log_act_size = filenames.get(filename, 0)
+						if 'p' in key_flags.keys():
+							log_new_size = log_act_size
 						if log_act_size > log_new_size:
-							self_log("Resetting seek position for "+filename)
+							self_log(  "Resetting seek position for "+filename)
 							filenames[filename] = log_new_size
 						if log_new_size > log_act_size:
 							seek_pos = log_act_size
 							if log_act_size == 0: #we just started
-								if log_new_size > 1024:
-									seek_pos = log_new_size - 1024
+								seek_pos = log_new_size
 							else:
 								seek_pos = log_act_size
 							file.seek(seek_pos)
 							filenames[filename] = log_new_size
 							lines = file.read().split('\n')
 							for line in lines:
-								if len(line)>0:
-									if options.microTS:
-										line = kill_microTS(line, options.microTS)
-									lastline=line_handler(config, stats, catenate, line)
-									if len(lastline) > 0:
-										sens = myDiffer(options.sensivity, lastline, bufferline)
+								if len(line) > 0:
+									if not 'm' in key_flags.keys():
+										sens = myDiffer(options.sensivity, line, bufferline)
 										if sens >= options.sensivity:
-											if scnt > 0 and options.mrp > 0:
-												self_log("Last message repeated "+str(scnt)+" times")
-												stats["repeated"] += scnt
-											print lastline
+											if scnt > 0:
+												if options.mrp > 0:
+													self_log(  "Last message repeated "+str(scnt)+" times")
+												scnt = 0
+										else:
+											stats["repeated"] += 1
+											scnt+=1
+										bufferline = line
+									if not scnt: 
+										if options.microTS:
+											line = kill_microTS(line, options.microTS)
+										lastline = line_handler(key_flags, rec1, config, options, stats, catenate, line)
+										add_filename = ""
+										if len(lastline) > 0:
+											if options.printFilename:
+												pfilename=os.path.basename(filename).ljust(int(config["limitFilename"]))[0:(int(config["limitFilename"]))]
+												add_filename = FND_PREFIX + pfilename + ' \033[0m'
+											
+											if options.replaceLogtime:
+												try:
+													lastline = replace_log_datetimes(rec1, lastline)
+												except:
+													print str(sys.exc_info()[1]) + LF
+													pass
+											"""highlight"""
+											for hl in config["HIGHLIGHT"].keys():
+												if lastline.find(hl) >- 1:
+													stats["highlighted"] += 1
+													hlv = config["HIGHLIGHT"].get(hl, 0)
+													#hm underscore so set at begin and after all 0m?
+													#self_log(  "to be highlighted with "+hlv+" linelength="+str(len(lastline)) )
+											""" main out"""
+											print "\033[K"
+											print "\033[A"+add_filename + lastline + LF
+											print_status(config, key_flags, stats)
+
 											stats["seen"] += 1
 											scnt=0
-										else:
-											scnt+=1
-										bufferline = lastline
 					except:
 						print INTERNAL_PREFIX + str(sys.exc_info()[1]) + config["MYCOLORS"].get("cup","1")
 						self_log(filename+" missing. Tailing stopped.")
 						del filenames[filename]
 						pass
 		except:
-			self_log("\nAborting. Should only happen by external termination (kill, ctrl-c ...).")
+			self_log(  "\nAborting. Should only happen by termination (q(uit) kill, ctrl-c ...).")
 			latesterror=str(sys.exc_info()[1])
 			if latesterror:
-				self_log("Latest error: "+latesterror)
+				self_log(  "Latest error: "+latesterror)
 	else: 
 		""" just proceed a catenate """
 		if os.path.isfile(catenate):
@@ -295,7 +456,7 @@ def main():
 					if len(line)>0:
 						if options.microTS:
 							line = kill_microTS(line, options.microTS)
-						lastline = line_handler(config, stats, catenate, line)
+						lastline = line_handler(key_flags, config, options, stats, catenate, line)
 						if options.catenateOutput:
 							sys.stdout.write('.')
 						else:
@@ -303,7 +464,7 @@ def main():
 								sens = myDiffer(options.sensivity, lastline, bufferline)
 								if sens >= options.sensivity:
 									if scnt > 0 and options.mrp > 0:
-										self_log("Last message repeated "+str(scnt)+" times")
+										self_log(  "Last message repeated "+str(scnt)+" times")
 									print lastline
 								
 								scnt=0
@@ -314,7 +475,7 @@ def main():
 				print str(sys.exc_info()[1])
 				
 		else:
-			self_log("No regular file")
+			self_log(  "No regular file")
 
 def myDiffer(sensivity, lastline, bufferline):
 	""" differ won't work since it is not case-sens"""
@@ -332,34 +493,15 @@ def myDiffer(sensivity, lastline, bufferline):
 		return abs(len(lastline)-len(bufferline))
 		
 
-def output_and_sensivity(diff, lastline, bufferline, sensivity, scnt):
-	if len(lastline) > 0:
-		linediff = string.join(diff.compare(lastline,bufferline))
-		sens = len(linediff.split('+'))
-		if sens > sensivity:
-			if scnt > 0 and options.mrp > 0:
-				self_log("Last message repeated "+str(scnt)+" times")
-			print lastline
-			scnt=0
-		else:
-			scnt+=1
-		bufferline = lastline
-	return scnt
-
 def log_handler(config, stats, l):
 	""" add config values via log itself """
 	hit = False
 	if l.find('LOGTAILCLEAR')>-1:
 		hit = True
 		for v in config["REMOTEREPLACE"].keys():
-			self_log("Removing from being replaced:"+v+" WITH "+str(config["REMOTEREPLACE"][v]))
+			self_log(  "Removing from being replaced:"+v+" WITH "+str(config["REMOTEREPLACE"][v]))
 			del config["REPLACE"][v]
 			del config["REMOTEREPLACE"][v]
-	
-	if l.find('LOGTAILSTATS')>-1:
-		hit = True
-		for v in stats.keys():
-			self_log(v+" "+str(stats[v]))
 
 	if l.find('LOGTAILREPLACE')>-1:
 		lh=l.split('LOGTAILREPLACE')
@@ -372,95 +514,133 @@ def log_handler(config, stats, l):
 				config["REPLACE"][key] = val
 				config["REMOTEREPLACE"][key] = val
 				hit = True
-				self_log("Now replacing <"+key+"> with <"+val+">")
+				self_log(  "Now replacing <"+key+"> with <"+val+">")
 	return hit
 
-def line_handler(config, stats, catenate, l):
-	""" not "one" but l(ine) - all dropping and replacements and posttrigger here """
-	if log_handler(config,stats, l):
-		l=""
+def line_drop(rec1, config, options, stats, catenate, l):
 	for dropw in config["DROP"].keys():
 		if dropw.find('_AND_')>-1:
 			acnt=0
-			and_dropws=dropw.split('_AND_')
+			and_dropws = dropw.split('_AND_')
 			for and_dropw in and_dropws:
 				if l.find(and_dropw)>-1:
 					acnt+=1
-			if acnt==len(and_dropws):
+			if acnt == len(and_dropws):
 				l=""
 				stats["dropped"] += 1
 		else:
 			if l.find(dropw)>-1:
 				l=""
 				stats["dropped"] += 1
-	if len(l)>0:
-		for word in config["REPLACE"].keys():
-			word_asfield = False
-			if word.find('#') > -1:
-				word_asfield = True
-				word=word.replace('#',"")
-			if l.find(word)>-1:
-				if not word_asfield:
-					l=l.replace(word,config["REPLACE"].get(word,""))
-				else: #del from word to next whitespace
-					ebuf=""
-					buf=l.split()
-					for elem in buf:
-						if elem.find(word)>-1:
-							elem=config["REPLACE"].get(word+'#',"")
-						ebuf=ebuf+" "+elem
-					l=ebuf
-		for colkey in config["COLOR"].keys():
-			origColKey = colkey
-			colkey_asfield = False
-			if colkey.find('#')>-1:
-				""" used to mark keyword as field, next whitespace demarks """
-				colkey=colkey.replace('#','')
-				colkey_asfield=True
-			i=l.find(colkey)
-			if i>-1:
-				ansi=config["COLOR"].get(origColKey,"")
-				Tansi=ansi.split()
-				Tcol=""
-				for iansi in Tansi:
-					Tcol = Tcol + config["MYCOLORS"].get(iansi,"")
-				if not colkey_asfield:
-					l=l.replace(colkey,Tcol+colkey+chr(27)+"[0m")
-				else:
-					ebuf=""
+	return l
+
+def line_replace(rec1, config, options, stats, catenate, l):
+	for word in config["REPLACE"].keys():
+		wf = False #word as field
+		if word.find('#') > -1:
+			wf = True
+			word = word.replace('#',"")
+		if l.find(word)>-1:
+			if not wf:
+				l=l.replace(word,config["REPLACE"].get(word,""))
+				stats["replaced"] += 1
+			else: #del from word to next whitespace
+				ebuf=""
+				buf=l.split()
+				for elem in buf:
+					if elem.find(word)>-1:
+						elem = config["REPLACE"].get(word+'#',"")
+					ebuf=ebuf+" "+elem
+				l=ebuf
+				stats["replaced"] += 1
+	return l
+
+def line_color(rec1, config, options, stats, catenate, l):
+	for colkey in config["COLOR"].keys():
+		origColKey = colkey
+		wf = False
+		if colkey.find('#')>-1:
+			""" used to mark keyword as field, next whitespace demarks """
+			colkey = colkey.replace('#','')
+			wf = True
+		i=l.find(colkey)
+		if i>-1:
+			ansi=config["COLOR"].get(origColKey,"")
+			Tansi=ansi.split()
+			Tcol=""
+			for iansi in Tansi:
+				Tcol = Tcol + config["MYCOLORS"].get(iansi,"")
+			if not wf:
+				l = l.replace(colkey,Tcol+colkey+chr(27)+"[0m")
+				stats["colourised"] += 1
+			else:
+				ebuf=""
+				append=""
+				buf=l.split()
+				for elem in buf:
+					if elem.find(colkey)>-1:
+						elem = elem.replace(colkey,Tcol+colkey)
+						append = chr(27)+"[0m"
+						stats["colourised"] += 1
+					ebuf=ebuf+" "+elem+append
 					append=""
-					buf=l.split()
-					for elem in buf:
-						if elem.find(colkey)>-1:
-							elem=elem.replace(colkey,Tcol+colkey)
-							append=chr(27)+"[0m"
-						ebuf=ebuf+" "+elem+append
-						append=""
-					l=ebuf
+				l=ebuf
+	return l
+
+def line_trigger(rec1, config, options, stats, catenate, l):
+	for trigger in config["POSTTRIGGER"]:
+		t=""
+		if trigger.find('_AND_')>-1:
+			acnt=0
+			and_triggers = trigger.split('_AND_')
+			for and_trigger in and_triggers:
+				if l.find(and_trigger)>-1:
+					acnt+=1
+			if acnt == len(and_triggers):
+				t = config["POSTTRIGGER"].get(trigger,"")
+			else:
+				if l.find(trigger)>-1:
+					t = config["POSTTRIGGER"].get(trigger,"").strip()
+		if len(t)>3:
+			sp=""
+			if t.find('_LINE_') >-1:
+				t = t.replace('_LINE_','')
+				sp=' \"'+l+'\"'
+			if t.find('_OLINE_') >-1:
+				t = t.replace('_OLINE_','')
+				sp=' \"'+ol+'\"'
+			try:
+				os.system(t+sp)
+				stats["triggered"] += 1
+			except:
+				print str(sys.exc_info()[1])
+
+def line_handler(key_flags, rec1, config, options, stats, catenate, l):
+	""" not "one" but l(ine) """
+	if log_handler(config,stats, l):
+		l=""
+		return l
+	ol = l
+	if not 'd' in key_flags.keys():
+		l = line_drop(rec1, config, options, stats, catenate, l)
+	if len(l) > 0:
+		if not 'r' in key_flags.keys():
+			l = line_replace(rec1, config, options, stats, catenate, l)
+		if not 'c' in key_flags.keys():
+			l = line_color(rec1, config, options, stats, catenate, l)
+		
 		if not catenate:
-			for trigger in config["POSTTRIGGER"]:
-				t=""
-				if trigger.find('_AND_')>-1:
-					acnt=0
-					and_triggers = trigger.split('_AND_')
-					for and_trigger in and_triggers:
-						if l.find(and_trigger)>-1:
-							acnt+=1
-					if acnt==len(and_triggers):
-						t = config["POSTTRIGGER"].get(trigger,"")
-				else:
-					if l.find(trigger)>-1:
-						t = config["POSTTRIGGER"].get(trigger,"").strip()
-				if len(t)>3:
-					try:
-						os.system(t)
-					except:
-						print str(sys.exc_info()[1])
-			l=l.strip()
+			if not 't' in key_flags.keys():
+				line_trigger(rec1, config, options, stats, catenate, l)
 	return l
 
 def create_conf(filename):
-	defconf='#sample configuration for logTail, see readme for more details\nDROP{FOO _AND_ Bar}\n\nREPLACE{hostname_AND_Foo} Bar\n\nCOLOR{Foo}blue bred bold blink beep\n\nPOSTTRIGGER{Firewall}beep &'
+	defconf = ('#sample configuration for logTail,\n\
+				DROP{FOO _AND_ Bar}\n\n\
+				REPLACE{hostname_AND_Foo} Bar\n\n\
+				COLOR{keyword after being replaced}blue beep\n\n\
+				HIGHLIGHT{keyword after being replaced}\
+				POSTTRIGGER{Firewall}beep &' )
 	try:
 		nconf=open(filename, "w")
 	except:
