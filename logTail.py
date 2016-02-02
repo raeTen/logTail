@@ -19,7 +19,7 @@
 INTERNAL_PREFIX = "\033[1;31mlog\033[33mTail\033[37m:\033[0m "
 FND_PREFIX="\033[30;1m" 
 STATUS_PREFIX="\033[?25l"
-VERSION = "0.9.5"
+VERSION = "0.9.6" 
 ETERNITY = True 
 """ rescanning given destination-path after x seconds """
 SCAN_INTERVAL = 20
@@ -59,15 +59,15 @@ def get_ch():
 		termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 	return ch
 
-def add_input(input_queue):
-	input_queue.put(get_ch())
+def add_input(i_que):
+	i_que.put(get_ch())
 
 def io_thread():
-	input_queue = Queue.Queue()
-	input_thread = threading.Thread(target=add_input, args=(input_queue,))
+	i_que = Queue.Queue()
+	input_thread = threading.Thread(target=add_input, args=(i_que,))
 	input_thread.daemon = True
 	input_thread.start()
-	return input_queue
+	return i_que
 
 def file_init():
 	atexit.register(clean_up_term)
@@ -134,13 +134,6 @@ def m_date(conf_filename, act_mdate):
 	ts = os.path.getmtime(conf_filename)
 	return ts, (ts != act_mdate)
 
-
-def show_config(chain):
-	tmpvals=""
-	for value in conf_dict.keys():
-		tmpvals=tmpvals+conf_dict.get(value,0)+" "+value+"|"
-	self_log(confcategory+":"+tmpvals)
-	
 
 def loadConfig(config, options):
 	file = options.configfile
@@ -314,8 +307,8 @@ def init_check(options):
 		sys.exit(1)
 	return options.configfile
 
-def key_handler(key_flags, input_queue):
-	key = input_queue.get()
+def key_handler(key_flags, i_que):
+	key = i_que.get()
 	if key == 'q':
 		sys.stdout = sys.__stdout__
 		sys.stdin = sys.__stdin__
@@ -327,11 +320,11 @@ def key_handler(key_flags, input_queue):
 		if len(key) == 1 and key in KEYB.keys():
 			key_flags[key] = KEYB.get(key,0);
 	#print key_flags
-	input_queue = io_thread()
-	return input_queue
+	i_que = io_thread()
+	return i_que
 
 def main():
-	input_queue = io_thread()
+	i_que = io_thread()
 	options = get_commandline_options()
 	cf = init_check(options)
 	catenate = options.catenate
@@ -362,8 +355,8 @@ def main():
 			while ETERNITY: 
 				""" main loop """
 				print_status(config, key_flags, stats)
-				if not input_queue.empty():
-					input_queue = key_handler(key_flags, input_queue)
+				if not i_que.empty():
+					i_que = key_handler(key_flags, i_que)
 				time.sleep(POLLBASE)
 				scan_cnt+=1
 				if scan_cnt >= (float(1)/POLLBASE * SCAN_INTERVAL):
@@ -371,8 +364,10 @@ def main():
 					scan_cnt=0
 				act_mdate, reload_config = m_date(cf, act_mdate)
 				if reload_config:
+					re_pathScan(options, config, filenames, binary_filenames)
 					self_log(  "Reloading configuration.")
 					config, act_mdate = loadConfig(config, options)
+					re_pathScan(options, config, filenames, binary_filenames)
 				for filename in filenames.keys():
 					try:
 						file = open(filename,'r')
@@ -394,7 +389,12 @@ def main():
 							filenames[filename] = log_new_size
 							lines = file.read().split('\n')
 							for line in lines:
+								if not 'd' in key_flags.keys(): 
+									"""drop line in scope of origin before any other modification"""
+									line = line_drop(rec1, config, options, stats, catenate, line)
 								if len(line) > 0:
+									if options.microTS:
+										line = kill_microTS(line, options.microTS)
 									if not 'm' in key_flags.keys():
 										sens = myDiffer(options.sensivity, line, bufferline)
 										if sens >= options.sensivity:
@@ -406,9 +406,9 @@ def main():
 											stats["repeated"] += 1
 											scnt+=1
 										bufferline = line
+									else:
+										scnt = False
 									if not scnt: 
-										if options.microTS:
-											line = kill_microTS(line, options.microTS)
 										lastline = line_handler(key_flags, rec1, config, options, stats, catenate, line)
 										add_filename = ""
 										if len(lastline) > 0:
@@ -429,7 +429,6 @@ def main():
 													hlv = config["HIGHLIGHT"].get(hl, 0)
 													""" TODO """
 													#testing with underscore complete line. Better a newline with single coloured overline
-													#self_log(  "to be highlighted with "+hlv+" linelength="+str(len(lastline)) )
 											""" main out"""
 											print "\033[K"
 											print "\033[A"+add_filename + lastline + LF
@@ -622,8 +621,8 @@ def line_handler(key_flags, rec1, config, options, stats, catenate, l):
 		l=""
 		return l
 	ol = l
-	if not 'd' in key_flags.keys():
-		l = line_drop(rec1, config, options, stats, catenate, l)
+	#if not 'd' in key_flags.keys():
+	#	l = line_drop(rec1, config, options, stats, catenate, l)
 	if len(l) > 0:
 		if not 'r' in key_flags.keys():
 			l = line_replace(rec1, config, options, stats, catenate, l)
